@@ -34,11 +34,15 @@ def scrape_movie_data(movie_link):
     year_link = year_div.find('a', class_="ipc-link ipc-link--baseAlt ipc-link--inherit-color")
     year = year_link.text
 
-    director = soup.find('a', class_="ipc-metadata-list-item__list-content-item "
-                                     "ipc-metadata-list-item__list-content-item--link").text
+    try:
+        directors_ul = soup.select_one('span:contains("Directors") + div ul').find_all('li')
+        directors = [director.text for director in directors_ul]
+    except:
+        directors = [soup.find('a', class_="ipc-metadata-list-item__list-content-item "
+                                           "ipc-metadata-list-item__list-content-item--link").text]
 
     cast_links = soup.find_all('a', {'data-testid': 'title-cast-item__actor'})
-    cast = [link.get_text() for link in cast_links]
+    cast = [actor.get_text() for actor in cast_links]
 
     first_link = WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.ipc-lockup-overlay.ipc-focusable'))
@@ -65,7 +69,7 @@ def scrape_movie_data(movie_link):
         "rating": rating,
         "genres": genres,
         "release_year": year,
-        "director": director,
+        "director(s)": directors,
         "cast": cast,
         "image": img_src
     }
@@ -85,14 +89,17 @@ try:
     for link in movie_links[:251]:
         driver.get(link)
         # time.sleep(0.25)
-        movie_data = scrape_movie_data(link)
-        MOVIES_DATA.append(movie_data)
+
+        current_movie_data = scrape_movie_data(link)
+        MOVIES_DATA.append(current_movie_data)
         # time.sleep(0.25)
+
         driver.back()
 
-finally:
+except Exception as e:
+    print(f'Error has occurred: {e}')
 
+finally:
     df = pd.DataFrame(MOVIES_DATA)
     df.to_csv("imdb_top_250_movies_dataset.csv")
-
     driver.quit()
