@@ -1,6 +1,7 @@
 import time
 import requests
 import pandas as pd
+import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -17,15 +18,50 @@ HEADERS = {
 URL = "https://m.imdb.com/chart/top/"
 MOVIES_DATA = []
 
+def fetch(link: str = "", headers: dict[str,str] = {}):
+    if link == "":
+        raise Exception("Link cannot be empty")
+    response = requests.get(url=link, headers=headers)
+    return response
 
-def scrape_movie_data(movie_link):
-    response = requests.get(url=movie_link, headers=HEADERS)
-    response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+def is_in_ordered_list(key: str)->bool:
+    """ returns if given key is in the top 250 list """
+    return bool(re.search(r'^\d',key))
 
-    title = soup.find('span', class_='hero__primary-text', attrs={'data-testid': 'hero__primary-text'}).text
-    rating = soup.find('span', class_='sc-bde20123-1 cMEQkK').text
+def is_a_year_format(key: str)->bool:
+    """ returns if a given key is in the year format {\d\d\d\d}"""
+    return bool(re.search(r'\d\d\d\d',key))
+
+def get_top_250_movies_titles(soup)->list[str]:
+    """ given the BeautifulSoup html object, returns all 250 titles of the listed movies"""
+    titles = soup.find_all('h3', class_='ipc-title__text')
+    titles = [item.text for item in titles if is_in_ordered_list(item.text)]
+    return titles
+
+def get_top_250_movies_ratings(soup)->list[str]:
+    """ given the BeautifulSoup html object, returns all 250 ratings of the listed movies"""
+    ratings = soup.find_all('span', class_='ipc-rating-star ipc-rating-star--base ipc-rating-star--imdb ratingGroup--imdb-rating')
+    ratings = [item.text.replace("\xa0"," ") for item in ratings]
+    return ratings 
+
+def get_top_250_movies_release_years(soup)->list[str]:
+    """ given the BeautifulSoup html object, returns the release years for the top 250 movies"""
+    release_years = soup.find_all('span', class_='sc-b189961a-8 kLaxqf cli-title-metadata-item')
+    release_years = [year.text for year in release_years if is_a_year_format(year.text)]
+    return release_years
+
+
+def scrape_movie_data(movie_link,headers):
+
+    response = fetch(movie_link,headers)
+    soup = BeautifulSoup(response.text, 'lxml')
+
+    titles = get_top_250_movies_titles(soup)
+
+    ratings = get_top_250_movies_ratings(soup)
+
+    years = get_top_250_movies_release_years(soup)
 
     genre_div = soup.find('div', {'class': 'ipc-chip-list__scroller'})
     genres = [chip.find('span', {'class': 'ipc-chip__text'}).get_text() for chip in genre_div.find_all('a')]
@@ -65,10 +101,10 @@ def scrape_movie_data(movie_link):
     img_src = soup.find('img', class_='poster').get('src')
 
     movie_data = {
-        "title": title,
-        "rating": rating,
+        "titles": titles,
+        "ratings": ratings,
         "genres": genres,
-        "release_year": year,
+        "release_years": years,
         "director(s)": directors,
         "cast": cast,
         "image": img_src
@@ -103,3 +139,5 @@ finally:
     df = pd.DataFrame(MOVIES_DATA)
     df.to_csv("imdb_top_250_movies_dataset.csv")
     driver.quit()
+
+
