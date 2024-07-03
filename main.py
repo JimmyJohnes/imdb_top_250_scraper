@@ -141,6 +141,42 @@ def get_movies_cast(links, headers):
         cast.append(','.join(cast_for_this_movie))
     return cast
 
+
+def scrape_movie_by_genre(genres,base_link,chart_link,headers):
+
+    response = fetch(f"{base_link}{chart_link}",headers)
+    soup = BeautifulSoup(response.text, 'lxml')
+
+    links = get_movies_links(soup)[:5]
+
+    titles = get_movies_titles(soup)[:5]
+
+    ratings = get_movies_ratings(soup)[:5]
+
+    years = get_movies_release_years(soup)[:5]
+
+    genres = get_movies_genres(links,headers)
+
+    images = get_movies_images(soup)[:5]
+    
+    directors = get_movies_directors(links,headers)
+    
+    cast = get_movies_cast(links,headers)
+
+    movie_data = {
+        "titles": titles,
+        "ratings": ratings,
+        "genres": genres,
+        "release_years": years,
+        "director(s)": directors,
+        "cast": cast,
+        "image": images,
+        "link": [base_link + link for link in links]
+    }
+    movie_data = pd.DataFrame(movie_data)
+    movie_data = movie_data.loc[movie_data['genres'].isin(genres)]
+    return movie_data
+
 def scrape_movie_by_director(director_name,base_link,chart_link,headers):
 
     response = fetch(f"{base_link}{chart_link}",headers)
@@ -211,6 +247,6 @@ def scrape_movie_data(base_link, chart_link,headers):
 
 start = time.time()
 print("Starting the Scrapin")
-data = scrape_movie_by_director("Frank Darabont",BASE_URL,TOP_MOVIES_URL,HEADERS)
+data = scrape_movie_by_genre(["crime","Drama"],BASE_URL,TOP_MOVIES_URL,HEADERS)
 print("Scraping ended, time taken:",time.time() - start)
 data.to_csv("data.csv")
