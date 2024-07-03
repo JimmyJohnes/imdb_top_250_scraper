@@ -1,4 +1,5 @@
 import time
+from pandas.core.apply import Axis
 import requests
 import pandas as pd
 import re
@@ -30,34 +31,34 @@ def is_a_year_format(key: str)->bool:
     """ returns if a given key is in the year format {\d \d \d \d}"""
     return bool(re.search(r'\d\d\d\d',key))
 
-def get_top_250_movies_titles(soup)->list[str]:
+def get_movies_titles(soup)->list[str]:
     """ given the BeautifulSoup html object, returns all 250 titles of the listed movies"""
     titles = soup.find_all('h3', class_='ipc-title__text')
     titles = [item.text for item in titles if is_in_ordered_list(item.text)]
     return titles
 
-def get_top_250_movies_ratings(soup)->list[str]:
+def get_movies_ratings(soup)->list[str]:
     """ given the BeautifulSoup html object, returns all 250 ratings of the listed movies"""
     ratings = soup.find_all('span', class_='ipc-rating-star ipc-rating-star--base ipc-rating-star--imdb ratingGroup--imdb-rating')
     ratings = [item.text.replace("\xa0"," ").split(" ")[0] for item in ratings]
     return ratings 
 
-def get_top_250_movies_release_years(soup)->list[str]:
+def get_movies_release_years(soup)->list[str]:
     """ given the BeautifulSoup html object, returns the release years for the top 250 movies"""
     release_years = soup.find_all('span', class_='sc-b189961a-8 kLaxqf cli-title-metadata-item')
     release_years = [year.text for year in release_years if is_a_year_format(year.text)]
     return release_years
 
-def get_top_250_movies_links(soup) -> list[str]:
+def get_movies_links(soup) -> list[str]:
     links = soup.find_all('a', class_="ipc-title-link-wrapper")
     links = [link["href"] for link in links if link["href"].split("/")[MOVIE_TITLE][0:2]=="tt"]
     return links
 
-def get_top_250_movies_genres(links,headers):
+def get_movies_genres(links,headers):
     genres = []
     for link in links:
         title = str(link).split('/')[MOVIE_TITLE]
-        sha256="8693f4655e3e7c5b6f786c6cf30e72dfa63a8fd52ebbad6f3a5ef7f03431c0f1"
+        sha256="78f137c28457417c10cf92a79976e54a65f8707bfc4fd1ad035da881ee5eaac6"
         API_URL= "https://caching.graphql.imdb.com/?operationName=TMD_Storyline&variables={\"isAutoTranslationEnabled\":false,\"locale\":\"en-US\",\"titleId\":\""+title+"\"}&extensions={\"persistedQuery\":{\"sha256Hash\":\""+sha256+"\",\"version\":1}}"
         payload = {}
         headers = {
@@ -70,13 +71,13 @@ def get_top_250_movies_genres(links,headers):
         genres.append(','.join(data))
     return genres
 
-def get_top_250_movies_images(soup) -> list[str]:
+def get_movies_images(soup) -> list[str]:
     images = soup.find_all('img', class_="ipc-image")
     for index in range(len(images)):
         images[index] = images[index]["src"]
     return images
 
-def get_top_250_movies_directors(links, headers):
+def get_movies_directors(links, headers):
     """ given the top 250 movie links, returns a 2d list of all the directors of each movie """
     directors = []
     for link in links:
@@ -108,7 +109,7 @@ def get_top_250_movies_directors(links, headers):
         directors.append(','.join(directors_for_this_movie))
     return directors
 
-def get_top_250_movies_cast(links, headers):
+def get_movies_cast(links, headers):
     """ given the top 250 movie links, returns a 2d list of all the directors of each movie """
     cast = []
     for link in links:
@@ -140,27 +141,26 @@ def get_top_250_movies_cast(links, headers):
         cast.append(','.join(cast_for_this_movie))
     return cast
 
-def scrape_movie_data(base_link, chart_link,headers):
+def scrape_movie_by_director(director_name,base_link,chart_link,headers):
 
     response = fetch(f"{base_link}{chart_link}",headers)
     soup = BeautifulSoup(response.text, 'lxml')
 
-    titles = get_top_250_movies_titles(soup)
+    links = get_movies_links(soup)[:5]
 
-    ratings = get_top_250_movies_ratings(soup)
+    titles = get_movies_titles(soup)[:5]
 
-    years = get_top_250_movies_release_years(soup)
+    ratings = get_movies_ratings(soup)[:5]
 
-    links = get_top_250_movies_links(soup)
+    years = get_movies_release_years(soup)[:5]
 
-    genres = get_top_250_movies_genres(links,headers)
+    genres = get_movies_genres(links,headers)
 
-    images = get_top_250_movies_images(soup)
-    images.pop()
+    images = get_movies_images(soup)[:5]
     
-    directors = get_top_250_movies_directors(links,headers)
+    directors = get_movies_directors(links,headers)
     
-    cast = get_top_250_movies_cast(links,headers)
+    cast = get_movies_cast(links,headers)
 
     movie_data = {
         "titles": titles,
@@ -172,11 +172,45 @@ def scrape_movie_data(base_link, chart_link,headers):
         "image": images,
         "link": [base_link + link for link in links]
     }
+    movie_data = pd.DataFrame(movie_data)
+    movie_data = movie_data.loc[movie_data['director(s)']==director_name]
     return movie_data
+
+def scrape_movie_data(base_link, chart_link,headers):
+
+    response = fetch(f"{base_link}{chart_link}",headers)
+    soup = BeautifulSoup(response.text, 'lxml')
+
+    titles = get_movies_titles(soup)[:5]
+
+    ratings = get_movies_ratings(soup)[:5]
+
+    years = get_movies_release_years(soup)[:5]
+
+    links = get_movies_links(soup)[:5]
+
+    genres = get_movies_genres(links,headers)
+
+    images = get_movies_images(soup)[:5]
+    
+    directors = get_movies_directors(links,headers)
+    
+    cast = get_movies_cast(links,headers)
+
+    movie_data = {
+        "titles": titles,
+        "ratings": ratings,
+        "genres": genres,
+        "release_years": years,
+        "director(s)": directors,
+        "cast": cast,
+        "image": images,
+        "link": [base_link + link for link in links]
+    }
+    return pd.DataFrame(movie_data)
 
 start = time.time()
 print("Starting the Scrapin")
-data = scrape_movie_data(BASE_URL,TOP_MOVIES_URL,HEADERS)
+data = scrape_movie_by_director("Frank Darabont",BASE_URL,TOP_MOVIES_URL,HEADERS)
 print("Scraping ended, time taken:",time.time() - start)
-data = pd.DataFrame(data)
 data.to_csv("data.csv")
